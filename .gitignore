@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+.env
+.env.local
+.env.*.local
+
+# Node / Frontend
+node_modules/
+dist/
+build/
+
+# OS / Editors
+.DS_Store
+*.swp
+.vscode/
+.idea/
+
+# Docker
+*.log
+docker-data/
+db-data/
+
+# Alembic
+alembic.ini
+
+# Misc
+*.sqlite
