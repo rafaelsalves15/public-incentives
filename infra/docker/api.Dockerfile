@@ -7,7 +7,7 @@ RUN apt-get update && apt-get install -y build-essential curl && rm -rf /var/lib
 COPY pyproject.toml /app/pyproject.toml
 
 RUN python -m pip install --upgrade pip && \
-    pip install --no-cache-dir fastapi "uvicorn[standard]" sqlalchemy psycopg2-binary alembic pydantic python-dotenv httpx
+    pip install --no-cache-dir fastapi "uvicorn[standard]" sqlalchemy psycopg2-binary alembic pydantic python-dotenv httpx pandas openai python-multipart aiofiles python-dateutil
 
 COPY app /app/app
 

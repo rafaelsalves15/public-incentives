@@ -10,7 +10,11 @@ dependencies = [
   "alembic",
   "pydantic",
   "python-dotenv",
-  "httpx",
+  "pandas",
+  "openai",
+  "python-multipart",
+  "aiofiles",
+  "python-dateutil",
 ]
 
 [tool.uvicorn]
