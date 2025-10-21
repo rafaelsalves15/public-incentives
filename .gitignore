@@ -25,8 +25,12 @@ build/
 docker-data/
 db-data/
 
-# Alembic
-alembic.ini
+# Data files (keep samples, ignore large files)
+data/*.csv
+!data/sample_*.csv
+
+# Windows/WSL metadata files
+*:Zone.Identifier
 
 # Misc
 *.sqlite
