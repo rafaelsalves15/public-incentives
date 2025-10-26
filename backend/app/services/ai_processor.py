@@ -59,6 +59,7 @@ Estrutura o texto em JSON:
   "objective": "Objetivo principal",
   "target_audience": ["PMEs", "Startups", etc],
   "eligible_sectors": ["Tecnologia", etc],
+  "eligible_cae_codes": ["Códigos CAE elegíveis - ex: 62010", "62020", "63110"],
   "eligible_regions": ["Norte", "Centro", etc],
   "company_sizes": ["micro", "small", "medium", "large"],
   "key_requirements": ["Requisito 1", etc],
@@ -73,8 +74,13 @@ Estrutura o texto em JSON:
   "important_notes": ["Nota 1", etc]
 }}
 
-Usa [] ou null se faltar informação.
-Responde SÓ com JSON:
+INSTRUÇÕES:
+- Usa [] ou null se faltar informação
+- OBRIGATÓRIO: INFERE códigos CAE específicos baseados nos setores elegíveis
+- Exemplos: "Educação" → ["85520", "85530"], "Tecnologia" → ["62010", "62020"], "Construção" → ["41200", "41100"], "Mobilidade/Transporte" → ["49410", "49420", "49390"]
+- Se não conseguir inferir códigos específicos, usa códigos relacionados ao setor
+- OBRIGATÓRIO: INFERE tamanhos de empresa compatíveis (ex: ["small", "medium", "large"])
+- Responde SÓ com JSON:
 """
             max_tokens = 800  # Shorter response expected
             operation_tag = "convert_text"
@@ -103,7 +109,8 @@ Extrai e estrutura a informação em JSON com o seguinte formato:
   "summary": "Resumo executivo de 2-3 frases explicando o incentivo",
   "objective": "Objetivo principal do incentivo",
   "target_audience": ["Tipo de beneficiários - ex: PMEs", "Startups", "Grandes empresas"],
-  "eligible_sectors": ["Setores elegíveis - ex: Tecnologia", "Indústria", "Serviços"],
+  "eligible_sectors": ["Setores específicos compatíveis com CAE - ex: Computer programming", "Software development", "Information technology"],
+  "eligible_cae_codes": ["Códigos CAE elegíveis - ex: 62010", "62020", "63110"],
   "eligible_regions": ["Regiões geográficas elegíveis - ex: Norte", "Centro", "Todo o país"],
   "company_sizes": ["micro", "small", "medium", "large"],
   "key_requirements": ["Requisito 1", "Requisito 2"],
@@ -122,6 +129,11 @@ INSTRUÇÕES:
 - Se alguma informação não estiver disponível, usa [] para arrays ou null para valores
 - Sê específico e preciso
 - Mantém termos técnicos em português
+- INFERE setores elegíveis mesmo com descrições vagas (ex: "educação" → ["Educação", "Formação"])
+- Se não há setores explícitos, infere do título/objetivo
+- OBRIGATÓRIO: INFERE códigos CAE específicos baseados nos setores elegíveis
+- Exemplos: "Educação" → ["85520", "85530"], "Tecnologia" → ["62010", "62020"], "Construção" → ["41200", "41100"]
+- Se não conseguir inferir códigos específicos, usa códigos relacionados ao setor
 - Responde APENAS com o JSON, sem texto adicional
 
 JSON:
@@ -545,53 +557,117 @@ JSON:
             return False
     
     def analyze_company_match(self, incentive: Incentive, company: Company, raw_csv_data: Dict) -> Dict[str, Any]:
-        """Analyze how well a company matches an incentive"""
-        csv_data = raw_csv_data or {}
+        """
+        Analyze how well a company matches an incentive (SINGLE mode).
         
-        # Get structured AI description if available
+        NOTE: This is kept for backwards compatibility.
+        For batch processing, use analyze_batch_match() instead (5x cheaper).
+        """
+        results = self.analyze_batch_match(incentive, [company], raw_csv_data)
+        return results[0] if results else {"match_score": 0.0, "reasons": []}
+    
+    def analyze_batch_match(
+        self, 
+        incentive: Incentive, 
+        companies: List[Company], 
+        raw_csv_data: Dict,
+        select_top_n: int = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Analyze multiple companies in a SINGLE prompt (BATCH mode).
+        
+        Companies list should be LARGER than select_top_n
+        so the LLM has real CHOICE power (not just validation).
+        
+        Example: Pass 10 companies, LLM selects top 5.
+        
+       
+        
+        Args:
+            incentive: Incentivo a avaliar
+            companies: Lista de empresas (ex: Top 10 candidatas)
+            raw_csv_data: Dados brutos do CSV
+            select_top_n: Número de empresas a selecionar (ex: 5)
+        
+        Returns:
+            Lista de dicts com match_score e reasons (ordenada por score)
+        """
+        if not companies:
+            return []
+        
+        csv_data = raw_csv_data or {}
         ai_desc = incentive.ai_description or {}
         
+        # Build OPTIMIZED prompt with CRITICAL info only
+        title = incentive.title[:200]
+        summary = ai_desc.get('summary', incentive.description[:300])
+        sectors = ai_desc.get('eligible_sectors', [])[:5]
+        cae_codes = ai_desc.get('eligible_cae_codes', [])[:10]  # CRITICAL: CAE codes
+        target_audience = ai_desc.get('target_audience', [])[:3]
+        requirements = ai_desc.get('key_requirements', [])[:4]
+        funding = ai_desc.get('funding_details', {})
+        
+        # Funding info (CRITICAL for matching)
+        max_amount = funding.get('max_amount', 'N/A')
+        funding_type = funding.get('funding_type', 'N/A')
+        
+        # Companies info (compact)
+        companies_info = []
+        for i, comp in enumerate(companies, 1):
+            comp_desc = (comp.trade_description_native or '')[:150]
+            cae_codes = comp.cae_primary_code or []
+            cae_codes_str = ', '.join(cae_codes) if cae_codes else 'N/A'
+            companies_info.append(f"""
+{i}. {comp.company_name}
+   CAE Label: {comp.cae_primary_label}
+   CAE Codes: {cae_codes_str}
+   Tamanho: {comp.company_size or 'N/A'}
+   Região: {comp.region or 'N/A'}
+   Atividade: {comp_desc}""")
+        
+        companies_text = "\n".join(companies_info)
+        
+        # Determinar quantas empresas retornar
+        n_to_select = select_top_n if select_top_n else len(companies)
+        
+        # OPTIMIZED BATCH PROMPT
+        # Balance: suficiente info para accuracy, mínimo tokens para custo
         prompt = f"""
-Analisa como esta empresa portuguesa corresponde a este incentivo público:
+Avalia match (0.0-1.0) entre incentivo e {len(companies)} empresas portuguesas.
+SELECIONA as {n_to_select} MELHORES empresas com maior fit.
 
-INCENTIVO:
-Título: {incentive.title}
-Resumo: {ai_desc.get('summary', incentive.description[:300])}
-Setores Elegíveis: {ai_desc.get('eligible_sectors', 'Não especificado')}
-Regiões Elegíveis: {ai_desc.get('eligible_regions', 'Não especificado')}
-Tamanhos de Empresa: {ai_desc.get('company_sizes', 'Não especificado')}
-Requisitos: {ai_desc.get('key_requirements', 'Não especificado')}
-Programa: {csv_data.get('incentive_program', 'Desconhecido')}
-Critérios: {json.dumps(csv_data.get('eligibility_criteria', {}), ensure_ascii=False)}
+INCENTIVO: {title}
+Setores elegíveis: {sectors}
+CAE codes elegíveis: {cae_codes}
+Público-alvo: {target_audience}
+Requisitos: {requirements}
+Financiamento: Máx €{max_amount} | Tipo: {funding_type}
+Resumo: {summary}
 
-EMPRESA:
-Nome: {company.company_name}
-Atividade CAE: {company.cae_primary_label}
-Descrição: {company.trade_description_native}
-Website: {company.website}
-Setor: {company.activity_sector}
-Tamanho: {company.company_size}
+EMPRESAS CANDIDATAS:
+{companies_text}
 
-Analisa a correspondência em JSON:
-{{
-  "match_score": 0.85,
-  "reasons": [
-    "Razão positiva 1",
-    "Razão positiva 2"
-  ],
-  "concerns": [
-    "Potencial preocupação"
-  ],
-  "recommendations": [
-    "Recomendação 1",
-    "Recomendação 2"
-  ]
-}}
+TAREFA: Avalia TODAS as {len(companies)} empresas e responde JSON com as {n_to_select} MELHORES (SEMPRE {n_to_select}, mesmo que sejam matches fracos):
+[
+  {{"company": "{companies[0].company_name}", "score": 0.95, "reasons": ["razão1", "razão2"]}},
+  {{"company": "{companies[1].company_name if len(companies) > 1 else '...'}", "score": 0.88, "reasons": ["razão1", "razão2"]}},
+  ... (SEMPRE {n_to_select} empresas no total)
+]
 
-match_score deve estar entre 0.0 e 1.0.
-Responde APENAS com JSON, sem texto adicional.
+CRITÉRIOS DE AVALIAÇÃO:
+- CAE Code Match: Empresa tem CAE code que está EXATAMENTE na lista de elegíveis? (PESO ALTO)
+  Lista elegível: {cae_codes}
+  Só conta se o CAE code da empresa estiver EXATAMENTE nesta lista!
+- Setor Match: Atividade da empresa alinha com setores elegíveis? (PESO ALTO)  
+- Tamanho Match: Tamanho da empresa está na lista de elegíveis? (PESO MÉDIO)
+- Região Match: Região da empresa está na lista de elegíveis? (PESO MÉDIO)
+- Atividade Relevante: Descrição da atividade faz sentido para o incentivo? (PESO MÉDIO)
 
-JSON:
+IMPORTANTE: 
+1. SEMPRE retorna as {n_to_select} melhores empresas, mesmo que tenham scores baixos
+2. VERIFICA EXATAMENTE se o CAE code da empresa está na lista elegível antes de dizer que é elegível
+3. Se não estiver na lista, diz "CAE code não elegível" e dá score mais baixo
+4. NÃO inventes CAE codes elegíveis que não existem!
 """
         
         try:
@@ -599,7 +675,7 @@ JSON:
                 model="gpt-4o-mini",
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.1,
-                max_tokens=800
+                max_tokens=2000  # Increased for large batches
             )
             
             content = response.choices[0].message.content.strip()
@@ -611,11 +687,122 @@ JSON:
                 content = content[:-3]
             content = content.strip()
             
-            return json.loads(content)
+            # Find the first complete JSON array/object
+            # Handle cases where LLM adds extra text after JSON
+            json_start = content.find('[')
+            if json_start == -1:
+                json_start = content.find('{')
+            
+            if json_start != -1:
+                # Find the matching closing bracket/brace
+                bracket_count = 0
+                json_end = json_start
+                for i, char in enumerate(content[json_start:], json_start):
+                    if char in '[{':
+                        bracket_count += 1
+                    elif char in ']}':
+                        bracket_count -= 1
+                        if bracket_count == 0:
+                            json_end = i + 1
+                            break
+                
+                content = content[json_start:json_end]
+            
+            results_json = json.loads(content)
+            
+            # Parse results: LLM retorna apenas as top N selecionadas
+            # Precisamos mapear de volta para todas as companies originais
+            selected_companies = {}
+            
+            for r in results_json:
+                if isinstance(r, dict):
+                    # Handle both 'company' (name) and 'company_id' (UUID) responses
+                    company_name = r.get('company', '').lower()
+                    company_id = r.get('company_id', '')
+                    score = r.get('score', 0.0) or r.get('match_score', 0.0)
+                    reasons = r.get('reasons', [])[:3]
+                    
+                    # Match com empresa original
+                    matched_company = None
+                    
+                    if company_id:
+                        # Direct company_id match
+                        matched_company = next((c for c in companies if str(c.company_id) == company_id), None)
+                    elif company_name:
+                        # Name-based match
+                        matched_company = next((c for c in companies 
+                                              if company_name in c.company_name.lower() or 
+                                                 c.company_name.lower() in company_name), None)
+                    
+                    if matched_company:
+                        # VALIDAÇÃO: Verificar se o LLM está a mentir sobre CAE codes
+                        corrected_reasons = []
+                        corrected_score = score
+                        
+                        # Verificar CAE codes elegíveis
+                        eligible_cae_codes = ai_desc.get('eligible_cae_codes', [])
+                        company_cae_codes = matched_company.cae_primary_code or []
+                        
+                        # Verificar se algum CAE code da empresa está realmente elegível
+                        is_cae_eligible = any(str(code) in eligible_cae_codes for code in company_cae_codes)
+                        
+                        # Corrigir razões se o LLM mentiu sobre CAE codes
+                        for reason in reasons:
+                            if 'CAE code' in reason and 'elegível' in reason.lower():
+                                if not is_cae_eligible:
+                                    # LLM mentiu - corrigir
+                                    corrected_reasons.append(f"CAE code {company_cae_codes} NÃO é elegível")
+                                    corrected_score = max(0.1, corrected_score - 0.3)  # Penalizar mentira
+                                else:
+                                    corrected_reasons.append(reason)
+                            else:
+                                corrected_reasons.append(reason)
+                        
+                        selected_companies[matched_company.company_id] = {
+                            "company_id": str(matched_company.company_id),
+                            "match_score": corrected_score,
+                            "reasons": corrected_reasons,
+                            "concerns": [],
+                            "recommendations": []
+                        }
+            
+            # Build results: apenas empresas selecionadas pelo LLM
+            # (empresas não selecionadas ficam de fora)
+            results = []
+            for company in companies:
+                if company.company_id in selected_companies:
+                    results.append(selected_companies[company.company_id])
+            
+            # ORDENAR por score DESC (melhor primeiro) - SEM CUSTO ADICIONAL
+            results.sort(key=lambda x: x['match_score'], reverse=True)
+            
+            # Se LLM retornou menos que esperado, log warning
+            if len(results) < n_to_select:
+                logger.warning(f"LLM returned {len(results)} companies, expected {n_to_select}")
+            
+            # Track cost
+            usage_data = {
+                "prompt_tokens": response.usage.prompt_tokens,
+                "completion_tokens": response.usage.completion_tokens,
+                "total_tokens": response.usage.total_tokens
+            }
+            self.cost_tracker.track_api_call(
+                operation_type="batch_company_match",
+                model_name="gpt-4o-mini",
+                usage_data=usage_data,
+                incentive_id=str(incentive.incentive_id),
+                cache_hit=False,
+                success=True
+            )
+            
+            logger.info(f"✅ Batch analyzed {len(companies)} companies in 1 call ({response.usage.total_tokens} tokens)")
+            
+            return results
             
         except Exception as e:
-            logger.error(f"Error analyzing match for company {company.company_name} and incentive {incentive.incentive_id}: {e}")
-            return {"match_score": 0.0, "reasons": [], "concerns": [], "recommendations": []}
+            logger.error(f"Error in batch match analysis: {e}")
+            # Fallback: return zeros for all
+            return [{"match_score": 0.0, "reasons": []} for _ in companies]
     
     def generate_incentive_summary(self, incentive: Incentive, raw_csv_data: Dict = None) -> str:
         """Generate a user-friendly summary of an incentive"""

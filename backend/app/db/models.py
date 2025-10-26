@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, Numeric, ForeignKey, JSON, Boolean, func
+from sqlalchemy import Column, Integer, String, Text, DateTime, Numeric, ForeignKey, JSON, Boolean, func, Float
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import UUID
 import uuid
@@ -59,32 +59,29 @@ class IncentiveMetadata(Base):
 
 class Company(Base):
     """
-    Tabela de empresas.
-    Schema livre conforme utilidade para o sistema.
+    Tabela de empresas do CSV original.
     
-    Campos do CSV:
-    - company_name, cae_primary_code, cae_primary_label, 
-      trade_description_native, website
+    Campos do CSV (4 disponíveis):
+    - company_name, cae_primary_label, trade_description_native, website
     
-    Campos derivados (para facilitar matching):
-    - activity_sector (derivado do CAE)
-    - company_size (micro/small/medium/large)
+    Campo futuro (NULL):
+    - company_size: Requer API externa (eInforma/Racius) - maior impacto no matching
     """
     __tablename__ = "companies"
     
     # Primary key
     company_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     
-    # Campos do CSV
+    # ✅ Campos do CSV (disponíveis e suficientes)
     company_name = Column(String(500), nullable=False)
-    cae_primary_code = Column(String(10))  # Código CAE (ex: "62010")
-    cae_primary_label = Column(String(500))  # Descrição do CAE
-    trade_description_native = Column(Text)  # Descrição da atividade comercial
+    cae_primary_label = Column(String(500))  # Ex: "Software development" - usado para matching
+    cae_primary_code = Column(JSON)          # Ex: ["62010", "62020"] - múltiplos códigos inferidos por LLM
+    trade_description_native = Column(Text)  # Descrição atividade em PT
     website = Column(String(500))
     
-    # Campos derivados (para facilitar matching na Fase 2)
-    activity_sector = Column(String(200))  # Setor derivado do CAE (ex: "Tecnologia")
-    company_size = Column(String(50))  # micro, small, medium, large
+    # ⚠️ Campos inferidos via LLM (NULL - requer dados externos)
+    company_size = Column(String(50))  # micro/small/medium/large - +20% precisão se adicionado
+    region = Column(String(100))       # Região NUTS II de Portugal
     
     # Metadata
     is_active = Column(Boolean, default=True)
@@ -95,14 +92,25 @@ class Company(Base):
 # STUB para Fase 2 - apenas para evitar erros de importação
 class IncentiveCompanyMatch(Base):
     """
-    STUB: Será implementado na Fase 2 (Matching).
-    Por agora existe apenas para evitar erros de importação.
+    Tabela de matches entre incentivos e empresas (FASE 2).
+    
+    Armazena as Top 5 empresas para cada incentivo, com:
+    - Score LLM (0.0-1.0)
+    - Razões do match
+    - Posição no ranking (1-5)
     """
     __tablename__ = "incentive_company_matches"
     
     match_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    incentive_id = Column(UUID(as_uuid=True), ForeignKey("incentives.incentive_id"))
-    company_id = Column(UUID(as_uuid=True), ForeignKey("companies.company_id"))
+    incentive_id = Column(UUID(as_uuid=True), ForeignKey("incentives.incentive_id"), nullable=False)
+    company_id = Column(UUID(as_uuid=True), ForeignKey("companies.company_id"), nullable=False)
+    
+    # Match quality (from LLM)
+    match_score = Column(Float)  # 0.0-1.0
+    match_reasons = Column(JSON)  # ["razão1", "razão2", ...]
+    ranking_position = Column(Integer)  # 1, 2, 3, 4, 5
+    
+    # Metadata
     created_at = Column(DateTime, server_default="CURRENT_TIMESTAMP")
 
 

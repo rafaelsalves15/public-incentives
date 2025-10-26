@@ -222,7 +222,8 @@ CREATE TABLE incentives (
     start_date        TIMESTAMP,
     end_date          TIMESTAMP,
     total_budget      NUMERIC,
-    source_link       VARCHAR(500)
+    source_link       VARCHAR(500),
+    cae_primary_code  VARCHAR(50)        -- ⭐ Inferido pela AI
 );
 ```
 
@@ -267,21 +268,28 @@ CREATE TABLE incentives_metadata (
 
 #### **📋 Tabela 3: `companies` (7 campos derivados)**
 
-**Propósito**: Empresas com campos derivados para matching (Fase 2).
+**Propósito**: Empresas do CSV original (4 campos disponíveis).
 
 ```sql
 CREATE TABLE companies (
     company_id               UUID PRIMARY KEY,
     company_name             VARCHAR(500) NOT NULL,
-    cae_primary_code         VARCHAR(10),       -- Derivado na Fase 2
-    cae_primary_label        VARCHAR(500),
-    activity_sector          VARCHAR(200),      -- Derivado do CAE
-    company_size             VARCHAR(50),       -- micro/small/medium/large
+    cae_primary_label        VARCHAR(500),      -- Ex: "Software development"
+    trade_description_native TEXT,              -- Descrição em PT
+    website                  VARCHAR(500),
+    cae_primary_code         VARCHAR(50),       -- ⭐ Inferido pela AI
+    company_size             VARCHAR(50),       -- ⭐ Inferido pela AI
+    region                   VARCHAR(100),      -- ⭐ Inferido pela AI
     is_active                BOOLEAN DEFAULT TRUE
 );
 ```
 
-**Nota**: Campos `cae_code`, `sector`, `size` são preenchidos na **Fase 2** (Matching).
+**Campos do CSV**: `company_name`, `cae_primary_label`, `trade_description_native`, `website`
+
+**Campos inferidos pela AI**:
+- `cae_primary_code`: Código CAE numérico inferido da descrição textual
+- `company_size`: Tamanho da empresa (micro/small/medium/large) inferido dos dados disponíveis
+- `region`: Região geográfica inferida do nome e dados da empresa
 
 ---
 
@@ -327,6 +335,23 @@ O `AIProcessor` processa apenas os incentivos marcados como `pending`, usando um
    - **Geração do zero** (se `ai_description` no CSV estava vazio): Prompt completo analisando `all_data` + `eligibility_criteria` (1500 tokens max)
    - **Economia**: Conversões custam ~43% menos que gerações
 
+#### **3️⃣ Fase 3: Enriquecimento de Dados (inferência automática)**
+
+Para maximizar a qualidade do matching, o sistema infere automaticamente campos em falta:
+
+**Para Incentivos:**
+- **CAE Code**: Inferido da descrição do incentivo usando LLM para identificar setores específicos
+
+**Para Empresas:**
+- **CAE Code**: Conversão de descrições textuais (`cae_primary_label`) para códigos numéricos usando LLM
+- **Região**: Inferência da localização baseada no nome da empresa e dados disponíveis
+- **Tamanho**: Classificação automática do porte da empresa (micro/small/medium/large)
+
+**Estratégias de Otimização:**
+- **Intelligent Fallback**: Mapeamento manual para casos comuns, LLM apenas quando necessário
+- **Intelligent Caching**: Reutilização de respostas para inputs similares
+- **Batch Processing**: Processamento em lotes para reduzir custos
+
 ---
 
 ### **Sistema Híbrido: Quando usa Determinístico vs AI**
@@ -335,7 +360,10 @@ O `AIProcessor` processa apenas os incentivos marcados como `pending`, usando um
 |-------|----------------------|---------------|
 | **Datas** | Extrai de `all_data->calendario` (chaves fixas) | Só se faltar após extração | 
 | **Orçamento** | Extrai de `all_data->estrutura->dotacoes` | Só se faltar após extração | 
-| **ai_description** | ❌ Não aplicável (precisa LLM para estruturar) | **Sempre**, mas com 2 prompts diferentes | 
+| **ai_description** | ❌ Não aplicável (precisa LLM para estruturar) | **Sempre**, mas com 2 prompts diferentes |
+| **CAE Codes** | ❌ Não aplicável (precisa LLM para inferir) | **Sempre** para incentivos e empresas |
+| **Região** | ❌ Não aplicável (precisa LLM para inferir) | **Sempre** para empresas |
+| **Tamanho** | ❌ Não aplicável (precisa LLM para inferir) | **Sempre** para empresas | 
 
 **Vantagens do Híbrido:**
 - ✅ **Grátis quando possível**
@@ -344,7 +372,7 @@ O `AIProcessor` processa apenas os incentivos marcados como `pending`, usando um
 
 ---
 
-### **5 Otimizações de Custo Implementadas**
+### **6 Otimizações de Custo Implementadas**
 
 #### **1️⃣ Flag de Processamento (`ai_processing_status`)**
 
@@ -386,12 +414,17 @@ Antes de chamar a API OpenAI, o sistema calcula um **hash MD5 do prompt completo
 
 **Quando ajuda**: Datasets com incentivos duplicados/similares
 
-#### **5️⃣ Temperature Baixa (0.1)**
 
-A API OpenAI é chamada com `temperature=0.1` (em vez do padrão 1.0):
-- **Respostas determinísticas**: Menos "criatividade", mais consistência
-- **Menos tokens desperdiçados**: AI vai direto ao ponto
-- **Melhor para dados estruturados**: JSON sempre bem formatado
+
+#### **5️⃣ Enriquecimento Inteligente de Dados**
+
+O sistema infere automaticamente campos em falta usando estratégias otimizadas:
+
+**Intelligent Fallback**: Mapeamento manual para casos comuns (ex: "Software development" → CAE 62010)
+**Intelligent Caching**: Reutilização de respostas para inputs similares
+**Batch Processing**: Processamento em lotes para reduzir custos de API
+
+**Impacto**: Campos como CAE codes, região e tamanho são essenciais para matching de qualidade, mas não estão nos CSVs originais. O sistema os infere automaticamente com custos mínimos.
 
 ---
 
@@ -458,6 +491,204 @@ Implementámos **2 comandos principais** para testar o sistema com custos mínim
 ---
 
 
+---
+
+## 🎯 FASE 2: Sistema de Matching Inteligente
+
+### **Objetivo da Fase**
+
+Implementar um sistema híbrido que identifica automaticamente as 5 empresas mais adequadas para cada incentivo, combinando análise determinística com inteligência artificial para maximizar precisão e minimizar custos.
+
+---
+
+### **Arquitetura do Sistema**
+
+O sistema implementa uma **abordagem unificada** que combina scoring determinístico com refinamento por LLM:
+
+```
+TODAS AS EMPRESAS
+│
+├─ UNIFIED SCORER (Determinístico)
+│   ├─ Analisa CAE codes, setores, região, tamanho
+│   ├─ Atribui scores positivos/negativos
+│   ├─ Ordena por relevância
+│   └─ Seleciona Top 15 candidatas
+│
+└─ LLM REFINEMENT (Inteligência Artificial)
+    ├─ Recebe Top 15 candidatas + critérios do incentivo
+    ├─ Seleciona as 5 melhores com justificações
+    ├─ Valida factualmente as razões
+    └─ Retorna ranking final otimizado
+```
+
+
+
+---
+
+### **Unified Scorer: Análise Determinística**
+
+#### **Sistema de Pontuação Unificado**
+
+O sistema substitui filtros binários por um **sistema de pontuação contínuo** que avalia múltiplos critérios:
+
+**Critérios Positivos:**
+- **CAE Code Match**: Pontuação alta para códigos CAE exatos ou relacionados
+- **Setor Match**: Alinhamento entre atividade da empresa e setores elegíveis
+- **Região Match**: Compatibilidade geográfica com regiões elegíveis
+- **Tamanho Match**: Adequação do tamanho da empresa aos requisitos
+
+**Critérios Negativos:**
+- **Penalties**: Redução de pontos para incompatibilidades óbvias
+- **Validação**: Verificação automática de dados inconsistentes
+
+#### **Vantagens da Abordagem Unificada**
+
+- **Flexibilidade**: Não elimina empresas prematuramente
+- **Granularidade**: Scores permitem ranking preciso
+- **Eficiência**: Processamento instantâneo sem custos de API
+- **Robustez**: Funciona mesmo com dados incompletos
+
+
+
+
+
+---
+
+### **LLM Refinement: Seleção Inteligente**
+
+#### **Processo de Refinamento**
+
+O LLM recebe as 15 melhores candidatas do Unified Scorer e:
+
+1. **Avalia Contextualmente**: Considera nuances que algoritmos determinísticos não captam
+2. **Seleciona Top 5**: Escolhe as empresas mais adequadas com justificações
+
+
+#### **Otimizações de Custo**
+
+**Batch Processing:**
+- Uma única chamada API por incentivo (vs múltiplas chamadas individuais)
+- Processamento de 15 empresas simultaneamente
+- Redução drástica de custos comparado com abordagens tradicionais
+
+**Prompt Engineering:**
+- Informação essencial apenas (título, setores, CAE codes, requisitos)
+- Exclusão de campos redundantes ou de baixo impacto
+- Estrutura otimizada para respostas JSON consistentes
+
+**Configuração Otimizada:**
+- `max_tokens=2000`: Suficiente para respostas completas sem truncamento
+- Validação pós-LLM para garantir qualidade
+
+#### **Validação e Correção Automática**
+
+O sistema implementa **validação pós-LLM** que:
+- Verifica factualmente as alegações do LLM (ex: elegibilidade de CAE codes)
+- Corrige scores quando detecta informações incorretas
+- Ajusta razões para refletir a realidade dos dados
+- Garante que rankings finais são baseados em factos
+
+
+---
+
+
+### **Escalabilidade e Performance**
+
+#### **Índices de Base de Dados**
+
+O sistema utiliza índices estratégicos para garantir performance com datasets grandes:
+
+```sql
+CREATE INDEX idx_companies_cae ON companies(cae_primary_label);
+CREATE INDEX idx_companies_name ON companies(company_name);
+CREATE INDEX idx_matches_incentive ON incentive_company_matches(incentive_id);
+```
+
+#### **Arquitetura de Caching**
+
+- **Memory Cache**: Reutilização de respostas LLM idênticas
+- **Intelligent Caching**: Cache baseado em similaridade para inputs parecidos
+- **Fallback Mechanisms**: Redução de chamadas LLM desnecessárias
+
+---
+
+### **Output e Resultados**
+
+#### **Estrutura de Resposta**
+
+Para cada incentivo, o sistema retorna:
+
+```json
+{
+  "incentive_id": "uuid",
+  "incentive_title": "Título do Incentivo",
+  "top_5_matches": [
+    {
+      "company_name": "Nome da Empresa",
+      "match_score": 0.85,
+      "unified_score": 150,
+      "reasons": ["Razão 1", "Razão 2"],
+      "ranking_position": 1
+    }
+  ]
+}
+```
+
+#### **Métricas de Qualidade**
+
+- **Scores Positivos**: Empresas com boa correspondência
+- **Scores Negativos**: Empresas com correspondência fraca
+- **Validação Automática**: Verificação de consistência dos resultados
+- **Ranking Ordenado**: Empresas ordenadas por relevância decrescente
+
+---
+### **Scripts de Teste**
+
+#### **🧪 Teste Rápido (1 incentivo)**
+
+```bash
+# Teste com 1 incentivo sample
+docker compose run --rm api python -c "
+from app.db.database import SessionLocal
+from app.services.ai_processor import AIProcessor
+from app.services.company_matcher import CompanyMatcher
+from app.db.models import Incentive
+import os
+
+session = SessionLocal()
+ai_processor = AIProcessor(os.getenv('OPENAI_API_KEY'), session)
+matcher = CompanyMatcher(ai_processor)
+
+# Pegar primeiro incentivo
+incentive = session.query(Incentive).first()
+matches = matcher.find_top_matches(session, str(incentive.incentive_id))
+
+print(f'Found {len(matches)} matches')
+for i, m in enumerate(matches, 1):
+    print(f'{i}. {m[\"company\"].company_name}: {m[\"match_score\"]:.2f}')
+"
+```
+
+#### **🧪 Teste Completo (todos incentivos)**
+
+```bash
+# TODO: Criar script test_matching_visual.py
+make test-matching
+```
+
+---
+
+### **Comandos Make (TODO)**
+
+```bash
+make test-matching              # Testar matching com sample
+make test-matching-full         # Processar 538 incentivos
+make export-matches-csv         # Exportar resultados para CSV
+make compare-optimized-legacy   # Comparar custos otimizado vs legado
+```
+
+---
+
 #
 ---
 
@@ -475,9 +706,12 @@ public-incentives/
 │   │   │   ├── models.py        # SQLAlchemy models (3 tabelas)
 │   │   │   └── database.py      # Conexão e sessão
 │   │   └── services/
-│   │       ├── data_importer.py      # CSV → BD
-│   │       ├── ai_processor.py       # Hybrid AI processing
-│   │       └── cost_tracker.py       # Cost tracking
+│   │       ├── data_importer.py          # CSV → BD
+│   │       ├── ai_processor.py           # Hybrid AI processing
+│   │       ├── cost_tracker.py           # Cost tracking
+│   │       ├── eligibility_filter.py     # FASE 2: Hard constraints
+│   │       ├── deterministic_scorer.py   # FASE 2: Scoring gratuito
+│   │       └── company_matcher.py        # FASE 2: Matching otimizado
 │   └── scripts/
 │       ├── test_ai_processing_visual.py  # Teste com visual tracking
 │       ├── create_sample_csvs.py         # Gera samples de teste
@@ -499,9 +733,15 @@ public-incentives/
 ---
 
 
-### **Roadmap Futuro**
+### **Roadmap**
 
-- [ ] **FASE 2**: Matching entre incentivos e empresas
+- [x] **FASE 0**: Bootstrap (Docker, BD, Migrações) ✅
+- [x] **FASE 1**: Base de Dados com AI Processing ✅
+- [x] **FASE 2**: Sistema de Matching Otimizado ✅
+  - [x] Eligibility Pre-Filtering
+  - [x] Deterministic Scoring  
+  - [x] LLM Refinement
+  - [ ] CSV Export (em progresso)
 - [ ] **FASE 3**: Chatbot para responder questões
 - [ ] Frontend em React
 
