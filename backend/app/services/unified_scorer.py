@@ -58,8 +58,8 @@ class UnifiedScorer:
         incentive_data = incentive.ai_description or {}
         eligible_cae_codes = incentive_data.get('eligible_cae_codes', [])
         eligible_sectors = incentive_data.get('eligible_sectors', [])
-        target_region = incentive_data.get('target_region', '')
-        target_company_size = incentive_data.get('target_company_size', '')
+        eligible_regions = incentive_data.get('eligible_regions', [])
+        eligible_company_sizes = incentive_data.get('company_sizes', [])
         
         # Obter dados da empresa
         company_cae = company.cae_primary_code
@@ -107,14 +107,18 @@ class UnifiedScorer:
                     break
         
         # 3. REGION MATCHING
-        if company_region and target_region:
-            if company_region.lower() == target_region.lower():
+        if company_region and eligible_regions:
+            # Verificar se "Todo o país" está nas regiões elegíveis
+            if any("todo o país" in region.lower() for region in eligible_regions):
+                score += self.WEIGHTS["region_match"]
+                details.append(f"Região: {company_region} (Todo o país) (+{self.WEIGHTS['region_match']})")
+            elif company_region.lower() in [region.lower() for region in eligible_regions]:
                 score += self.WEIGHTS["region_match"]
                 details.append(f"Região: {company_region} (+{self.WEIGHTS['region_match']})")
         
         # 4. COMPANY SIZE MATCHING
-        if company_size and target_company_size:
-            if company_size.lower() == target_company_size.lower():
+        if company_size and eligible_company_sizes:
+            if company_size.lower() in [size.lower() for size in eligible_company_sizes]:
                 score += self.WEIGHTS["size_match"]
                 details.append(f"Tamanho: {company_size} (+{self.WEIGHTS['size_match']})")
         

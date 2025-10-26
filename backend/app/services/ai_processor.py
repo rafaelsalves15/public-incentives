@@ -134,6 +134,7 @@ INSTRUÇÕES:
 - OBRIGATÓRIO: INFERE códigos CAE específicos baseados nos setores elegíveis
 - Exemplos: "Educação" → ["85520", "85530"], "Tecnologia" → ["62010", "62020"], "Construção" → ["41200", "41100"]
 - Se não conseguir inferir códigos específicos, usa códigos relacionados ao setor
+- OBRIGATÓRIO: INFERE tamanhos de empresa compatíveis (ex: ["small", "medium", "large"])
 - Responde APENAS com o JSON, sem texto adicional
 
 JSON:

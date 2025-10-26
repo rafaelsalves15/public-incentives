@@ -31,6 +31,10 @@ class CostTracker:
         "gpt-4o": {
             "input": 2.50,    # $2.50 / 1M tokens
             "output": 10.00   # $10.00 / 1M tokens
+        },
+        "text-embedding-3-small": {
+            "input": 0.02,    # $0.02 / 1M tokens
+            "output": 0.0     # Embeddings não têm output tokens
         }
     }
     
@@ -244,7 +248,10 @@ class CostTracker:
         operation_label = {
             "ai_description": "AI Description ",
             "extract_dates": "Extract Dates  ",
-            "extract_budget": "Extract Budget "
+            "extract_budget": "Extract Budget ",
+            "generate_incentive_embedding": "Incentive Embed ",
+            "generate_company_embedding": "Company Embed  ",
+            "batch_company_match": "Batch Match   "
         }.get(operation_type, operation_type)
         
         print(f"  {icon} {operation_label}: {cost_str:12} ({status})")
