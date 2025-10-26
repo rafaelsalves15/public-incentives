@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from app.db.database import SessionLocal
 from app.services.data_importer import DataImporter
 from app.services.ai_processor import AIProcessor
-from app.services.company_matcher import CompanyMatcher
+from app.services.company_matcher_unified import CompanyMatcherUnified
 import os
 import logging
 
@@ -103,7 +103,7 @@ async def match_companies(incentive_id: str, db: Session = Depends(get_db)):
             raise HTTPException(status_code=500, detail="OpenAI API key not configured")
         
         ai_processor = AIProcessor(api_key, db)
-        matcher = CompanyMatcher(ai_processor)
+        matcher = CompanyMatcherUnified(ai_processor)
         
         result = matcher.process_incentive_matches(db, incentive_id)
         
@@ -140,7 +140,7 @@ def process_all_matches_task(api_key: str):
     try:
         db = SessionLocal()
         ai_processor = AIProcessor(api_key, db)
-        matcher = CompanyMatcher(ai_processor)
+        matcher = CompanyMatcherUnified(ai_processor)
         
         result = matcher.process_all_incentives(db)
         db.close()

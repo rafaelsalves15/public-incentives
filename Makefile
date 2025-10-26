@@ -1,4 +1,4 @@
-.PHONY: up down logs api db test-sample test-sample-incremental setup-sample process-ai show-costs show-status clean-db
+.PHONY: up down logs api db test-sample test-sample-incremental setup-sample process-ai show-costs show-status clean-db test-matching test-matching-single test-matching-full export-matches
 
 up:
 	cp .env.sample .env || true
@@ -76,6 +76,45 @@ clean-db:
 	@echo "🧹 Limpando base de dados..."
 	docker compose up -d db
 	@sleep 2
-	docker compose exec -T db psql -U app -d incentives -c "TRUNCATE TABLE incentives_metadata, incentives, companies, ai_cost_tracking RESTART IDENTITY CASCADE;" 2>/dev/null || true
+	docker compose exec -T db psql -U app -d incentives -c "TRUNCATE TABLE incentives_metadata, incentives, companies, ai_cost_tracking, incentive_company_matches RESTART IDENTITY CASCADE;" 2>/dev/null || true
 	@echo "✅ Base de dados limpa!"
+	@echo ""
+
+# ========================================
+# FASE 2: MATCHING SYSTEM
+# ========================================
+
+test-matching-single:
+	@echo "🎯 Testando matching com 1 incentivo (rápido)..."
+	@echo ""
+	docker compose run --rm api python /app/scripts/test_matching_visual.py --single
+	@echo ""
+
+test-matching-cheap:
+	@echo "🧪 Testando matching com custos mínimos (~$0.005)..."
+	@echo ""
+	docker compose run --rm api python /app/scripts/test_matching_cheap.py
+	@echo ""
+
+test-matching:
+	@echo "🎯 Testando matching com sample (13 incentivos)..."
+	@echo ""
+	docker compose run --rm api python /app/scripts/test_matching_visual.py --sample
+	@echo ""
+
+test-matching-full:
+	@echo "🎯 Processando matching COMPLETO (538 incentivos)..."
+	@echo "⚠️  AVISO: Isto vai custar ~$0.80 USD"
+	@echo ""
+	@read -p "Confirmar? (y/N) " confirm && [ "$$confirm" = "y" ] || exit 1
+	@echo ""
+	docker compose run --rm api python /app/scripts/test_matching_visual.py --full
+	@echo ""
+
+export-matches:
+	@echo "💾 Exportando matches para CSV..."
+	@echo ""
+	docker compose exec -T db psql -U app -d incentives -c "\COPY (SELECT i.title as incentive_title, c.company_name, m.match_score, m.ranking_position, m.match_reasons FROM incentive_company_matches m JOIN incentives i ON m.incentive_id = i.incentive_id JOIN companies c ON m.company_id = c.company_id ORDER BY i.title, m.ranking_position) TO '/tmp/matches_export.csv' WITH CSV HEADER;"
+	docker compose cp db:/tmp/matches_export.csv ./data/matches_export_$(shell date +%Y%m%d_%H%M%S).csv
+	@echo "✅ Exportado para data/matches_export_*.csv"
 	@echo ""
