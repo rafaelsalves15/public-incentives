@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
 from app.db.database import SessionLocal
+from app.db.models import Incentive, IncentiveMetadata
 from app.services.data_importer import DataImporter
 from app.services.ai_processor import AIProcessor
 from app.services.company_matcher_unified import CompanyMatcherUnified

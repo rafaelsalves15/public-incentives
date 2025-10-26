@@ -846,6 +846,99 @@ Usa linguagem clara e adequada para negócios.
             logger.error(f"Error generating summary for incentive {incentive.incentive_id}: {e}")
             return f"Resumo não disponível para {incentive.title}"
     
+    def infer_company_data(self, company: Company) -> Dict[str, Any]:
+        """
+        Infere dados da empresa usando LLM:
+        - CAE codes (múltiplos códigos relevantes)
+        - Região (NUTS II de Portugal)
+        - Tamanho da empresa (micro/small/medium/large)
+        
+        Args:
+            company: Empresa com dados básicos (nome, CAE label, descrição)
+            
+        Returns:
+            Dict com cae_codes, region, size
+        """
+        # Cache key baseado no nome da empresa
+        cache_key = f"company_inference_{company.company_name}"
+        
+        if cache_key in self._prompt_cache:
+            self._cache_hits += 1
+            logger.info(f"🔍 Cache HIT for '{company.company_name}' (cache size: {len(self._prompt_cache)})")
+            return self._prompt_cache[cache_key]
+        
+        self._cache_misses += 1
+        logger.info(f"🔍 Cache MISS for '{company.company_name}' - calling OpenAI API (hits: {self._cache_hits}, misses: {self._cache_misses})")
+        
+        prompt = f"""
+Analisa esta empresa portuguesa e retorna APENAS um JSON válido:
+
+EMPRESA:
+- Nome: {company.company_name}
+- CAE Label: {company.cae_primary_label or 'N/A'}
+- Descrição: {company.trade_description_native or 'N/A'}
+- Website: {company.website or 'N/A'}
+
+RETORNA APENAS ESTE JSON (sem texto adicional):
+{{
+    "cae_codes": ["62010", "62020"],
+    "region": "Norte",
+    "size": "small"
+}}
+
+REGRAS:
+- cae_codes: Lista de códigos CAE relevantes (máximo 5)
+- region: Norte, Centro, Lisboa, Alentejo, Algarve, Açores, Madeira, ou "N/A"
+- size: micro, small, medium, large, ou "N/A"
+- SEM texto explicativo, SEM markdown, APENAS JSON
+"""
+        
+        try:
+            response = self.client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.2,
+                max_tokens=300
+            )
+            
+            content = response.choices[0].message.content.strip()
+            
+            # Parse JSON response
+            try:
+                result = json.loads(content)
+                
+                # Validar estrutura
+                if not isinstance(result, dict):
+                    raise ValueError("Response is not a dict")
+                
+                # Garantir campos obrigatórios
+                result.setdefault('cae_codes', [])
+                result.setdefault('region', 'N/A')
+                result.setdefault('size', 'N/A')
+                
+                # Validar tipos
+                if not isinstance(result['cae_codes'], list):
+                    result['cae_codes'] = []
+                if not isinstance(result['region'], str):
+                    result['region'] = 'N/A'
+                if not isinstance(result['size'], str):
+                    result['size'] = 'N/A'
+                
+                # Cache do resultado
+                self._prompt_cache[cache_key] = result
+                logger.info(f"✅ Cached result for '{company.company_name}' (cache size: {len(self._prompt_cache)})")
+                
+                return result
+                
+            except json.JSONDecodeError as e:
+                logger.error(f"JSON decode error for company {company.company_name}: {e}")
+                logger.error(f"Raw response: {content}")
+                return {"cae_codes": [], "region": "N/A", "size": "N/A"}
+            
+        except Exception as e:
+            logger.error(f"Error inferring data for company {company.company_name}: {e}")
+            return {"cae_codes": [], "region": "N/A", "size": "N/A"}
+
     def extract_structured_data(self, incentive: Incentive, raw_csv_data: Dict = None) -> Dict[str, Any]:
         """
         Legacy method - kept for backwards compatibility.
