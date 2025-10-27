@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from app.api import incentives_router, companies_router, data_management_router
+from app.api import incentives_router, companies_router, data_management_router, chatbot_router, web_interface_router
 
 app = FastAPI(
     title="Public Incentives API",
@@ -11,6 +11,8 @@ app = FastAPI(
 app.include_router(incentives_router)
 app.include_router(companies_router)
 app.include_router(data_management_router)
+app.include_router(chatbot_router)
+app.include_router(web_interface_router)
 
 @app.get("/health")
 def health():

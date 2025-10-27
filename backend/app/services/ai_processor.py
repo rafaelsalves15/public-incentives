@@ -1060,3 +1060,91 @@ REGRAS:
             "duration_seconds": duration,
             "cost_stats": self.cost_tracker.get_session_stats()
         }
+    
+    async def generate_text_response(self, prompt: str, max_tokens: int = 500) -> str:
+        """
+        Gera resposta de texto usando LLM para chatbot
+        
+        Args:
+            prompt: Prompt para o LLM
+            max_tokens: Número máximo de tokens na resposta
+            
+        Returns:
+            Resposta gerada pelo LLM
+        """
+        try:
+            # Verificar cache primeiro
+            prompt_hash = hashlib.md5(prompt.encode()).hexdigest()
+            if prompt_hash in self._prompt_cache:
+                self._cache_hits += 1
+                logger.info(f"Cache HIT for text response (hash: {prompt_hash[:8]}...)")
+                return self._prompt_cache[prompt_hash]
+            
+            self._cache_misses += 1
+            logger.info(f"Cache MISS for text response (hash: {prompt_hash[:8]}...)")
+            
+            # Chamar API OpenAI
+            response = self.client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": "Você é um assistente especializado em incentivos públicos portugueses. Responda de forma útil, amigável e precisa."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=max_tokens,
+                temperature=0.7
+            )
+            
+            # Extrair resposta
+            response_text = response.choices[0].message.content.strip()
+            
+            # Guardar no cache
+            self._prompt_cache[prompt_hash] = response_text
+            
+            # Tracking de custos
+            input_tokens = response.usage.prompt_tokens
+            output_tokens = response.usage.completion_tokens
+            total_tokens = response.usage.total_tokens
+            
+            # Calcular custos (gpt-4o-mini: $0.15/1M input, $0.60/1M output)
+            input_cost = (input_tokens / 1_000_000) * 0.15
+            output_cost = (output_tokens / 1_000_000) * 0.60
+            total_cost = input_cost + output_cost
+            
+            # Guardar tracking se cost_tracker tem o método
+            if hasattr(self.cost_tracker, 'track_cost'):
+                self.cost_tracker.track_cost(
+                    operation_type="text_response",
+                    model_name="gpt-4o-mini",
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    total_tokens=total_tokens,
+                    input_cost=input_cost,
+                    output_cost=output_cost,
+                    total_cost=total_cost,
+                    cache_hit=False,
+                    success=True
+                )
+            
+            logger.info(f"Generated text response: {total_tokens} tokens, ${total_cost:.6f}")
+            return response_text
+            
+        except Exception as e:
+            logger.error(f"Error generating text response: {e}")
+            
+            # Tracking de erro se cost_tracker tem o método
+            if hasattr(self.cost_tracker, 'track_cost'):
+                self.cost_tracker.track_cost(
+                    operation_type="text_response",
+                    model_name="gpt-4o-mini",
+                    input_tokens=0,
+                    output_tokens=0,
+                    total_tokens=0,
+                    input_cost=0,
+                    output_cost=0,
+                    total_cost=0,
+                    cache_hit=False,
+                    success=False,
+                    error_message=str(e)
+                )
+            
+            return "Desculpe, não consegui gerar uma resposta. Pode reformular a pergunta?"

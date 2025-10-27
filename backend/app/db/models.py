@@ -112,6 +112,10 @@ class IncentiveCompanyMatch(Base):
     
     # Metadata
     created_at = Column(DateTime, server_default=func.now())
+    
+    # Relationships
+    incentive = relationship("Incentive", foreign_keys=[incentive_id])
+    company = relationship("Company", foreign_keys=[company_id])
 
 
 class AICostTracking(Base):

@@ -733,6 +733,52 @@ public-incentives/
 ---
 
 
+---
+
+## 🤖 **FASE 3: Chatbot de Incentivos**
+
+### **Sistema Completo Implementado**
+
+O chatbot permite aos utilizadores interagir naturalmente com o sistema através de uma interface web moderna:
+
+**Funcionalidades:**
+- ✅ **Consultas sobre incentivos**: "Quais incentivos existem para empresas de software?"
+- ✅ **Exploração de empresas**: "Mostra-me empresas do setor tecnológico"
+- ✅ **Análise de correspondências**: "Que empresas são adequadas para o incentivo X?"
+- ✅ **Estatísticas e análises**: "Quantos incentivos temos na base de dados?"
+- ✅ **Interface web integrada**: Funciona dentro do container Docker
+
+**Arquitetura:**
+- **RAG (Retrieval-Augmented Generation)**: Usa dados estruturados como contexto
+- **Query Router inteligente**: Analisa intenções e roteia para handlers específicos
+- **Sistema de contexto**: Mantém memória da conversa
+- **Cache inteligente**: Reduz custos LLM reutilizando respostas similares
+
+### **Como Usar o Chatbot**
+
+```bash
+# Iniciar sistema completo
+make start-chatbot
+
+# Acessar interface web
+# http://localhost:8000/web/
+
+# Testar chatbot
+make test-chatbot
+
+# Teste completo do sistema
+make test-complete
+```
+
+**Exemplos de Perguntas:**
+- "Quais incentivos existem para empresas de software?"
+- "Mostra-me empresas do setor tecnológico"
+- "Que empresas são adequadas para o incentivo X?"
+- "Quantos incentivos temos na base de dados?"
+- "Qual o orçamento total disponível?"
+
+---
+
 ### **Roadmap**
 
 - [x] **FASE 0**: Bootstrap (Docker, BD, Migrações) ✅
@@ -741,9 +787,16 @@ public-incentives/
   - [x] Eligibility Pre-Filtering
   - [x] Deterministic Scoring  
   - [x] LLM Refinement
-  - [ ] CSV Export (em progresso)
-- [ ] **FASE 3**: Chatbot para responder questões
-- [ ] Frontend em React
+  - [x] CSV Export ✅
+- [x] **FASE 3**: Chatbot para responder questões ✅
+  - [x] ChatbotService com RAG
+  - [x] Query Router inteligente
+  - [x] Sistema de contexto
+  - [x] Interface web integrada
+- [x] **FASE 4**: Frontend Web Interface ✅
+  - [x] Interface de chat moderna
+  - [x] Integração com API
+  - [x] Funciona dentro do container
 
 ---
 
