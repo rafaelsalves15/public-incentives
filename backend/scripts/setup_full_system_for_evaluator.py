@@ -210,7 +210,7 @@ class FullSystemSetup:
                         self.db.commit()
                         logger.info(f"✅ Dados inferidos para empresa {i}: CAE={len(company.cae_primary_code)}, Região={company.region}, Tamanho={company.company_size}")
                     else:
-                        logger.warning(f"⚠️ Falha ao inferir dados para empresa {i}")
+                        logger.warning(f" Falha ao inferir dados para empresa {i}")
                 except Exception as e:
                     logger.error(f"❌ Erro ao inferir dados para empresa {i}: {e}")
                 
@@ -324,7 +324,6 @@ class FullSystemSetup:
                         from app.db.models import Company
                         company_exists = self.db.query(Company).filter(Company.company_id == company_id).first()
                         if not company_exists:
-                            logger.warning(f"   ⚠️ Empresa {company_id} não existe na BD, a ignorar")
                             continue
                         
                         match_record = IncentiveCompanyMatch(
@@ -371,7 +370,7 @@ class FullSystemSetup:
             
             logger.info("=" * 80)
         except Exception as e:
-            logger.warning(f"⚠️ Não foi possível obter estatísticas de custos: {e}")
+            logger.warning(f" Não foi possível obter estatísticas de custos: {e}")
     
     def run_complete_setup(self):
         """Executa setup completo do sistema"""
