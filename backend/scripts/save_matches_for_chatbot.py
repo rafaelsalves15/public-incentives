@@ -76,10 +76,8 @@ def save_matches_for_chatbot():
                         if company:
                             company_id = company.company_id
                     
-                    # ✅ VERIFICAR se empresa existe na BD antes de salvar
                     company_exists = db.query(Company).filter(Company.company_id == company_id).first()
                     if not company_exists:
-                        logger.warning(f"   ⚠️ Empresa {company_id} não existe na BD, a ignorar")
                         continue
                     
                     match_record = IncentiveCompanyMatch(
@@ -101,7 +99,6 @@ def save_matches_for_chatbot():
         
         logger.info(f"\n🎉 Total de matches salvos: {total_matches}")
         
-        # Verificar total na BD
         db_total = db.query(IncentiveCompanyMatch).count()
         logger.info(f"📊 Total na base de dados: {db_total}")
         
