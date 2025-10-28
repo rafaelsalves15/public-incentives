@@ -53,44 +53,6 @@ Este sistema resolve o problema de **matching entre incentivos públicos portugu
 | **Data Processing** | Pandas | Manipulação de CSVs e transformações |
 | **Interface Web** | HTML/CSS/JavaScript | Chatbot web integrado |
 
-### **Arquitetura de Alto Nível**
-
-```
-┌─────────────┐
-│   CSV Data  │ (incentivos.csv, companies.csv)
-└──────┬──────┘
-       │
-       ▼
-┌─────────────────────────────────────────────────────┐
-│           DATA IMPORT PIPELINE                       │
-│  • Parsing CSV (21 campos heterogéneos)             │
-│  • Validação e limpeza                              │
-│  • Separação: 10 campos principais + metadata      │
-└──────┬──────────────────────────────────────────────┘
-       │
-       ▼
-┌─────────────────────────────────────────────────────┐
-│         HYBRID PROCESSING SYSTEM                     │
-│  1️⃣ Deterministic Extraction (all_data JSON)        │
-│     → Extrai datas, orçamentos, estrutura          │
-│  2️⃣ AI Processing (quando deterministic falha)     │
-│     → GPT-4o-mini preenche campos em falta         │
-│  3️⃣ Cost Optimization                              │
-│     → Prompts adaptados, cache, token limits       │
-└──────┬──────────────────────────────────────────────┘
-       │
-       ▼
-┌──────────────────────┬──────────────────────┬───────────────────┐
-│   INCENTIVES (10)    │  METADATA (unique)   │   COMPANIES (7)   │
-│  • title             │  • raw_csv_data      │  • company_name   │
-│  • description       │  • all_data          │  • cae_code       │
-│  • ai_description    │  • ai_proc_status    │  • sector         │
-│  • dates (3)         │  • fields_by_ai      │  • size           │
-│  • total_budget      │  • processing_error  │  • region         │
-│  • source_link       │  ...                 │  ...              │
-│  • document_urls     │                      │                   │
-└──────────────────────┴──────────────────────┴───────────────────┘
-```
 
 ---
 
