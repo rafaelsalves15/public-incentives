@@ -57,8 +57,9 @@ async def list_companies(
                     "cae_primary_label": company.cae_primary_label,
                     "trade_description_native": company.trade_description_native,
                     "website": company.website,
-                    "activity_sector": company.activity_sector,
+                    "cae_primary_code": company.cae_primary_code,
                     "company_size": company.company_size,
+                    "region": company.region,
                     "is_active": company.is_active
                 }
                 for company in companies
@@ -90,8 +91,9 @@ async def get_company(company_id: str, db: Session = Depends(get_db)):
             "cae_primary_label": company.cae_primary_label,
             "trade_description_native": company.trade_description_native,
             "website": company.website,
-            "activity_sector": company.activity_sector,
+            "cae_primary_code": company.cae_primary_code,
             "company_size": company.company_size,
+            "region": company.region,
             "is_active": company.is_active,
             "created_at": company.created_at.isoformat() if company.created_at else None
         }

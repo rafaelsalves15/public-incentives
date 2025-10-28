@@ -1,4 +1,4 @@
-.PHONY: up down logs api db test-sample test-sample-incremental setup-sample process-ai show-costs show-status clean-db test-matching test-matching-single test-matching-full export-matches test-chatbot test-complete import-full import-sample import-test setup-test start-chatbot-test setup-evaluator setup-evaluator-quick setup-evaluator-custom
+.PHONY: up down logs api db test-sample test-sample-incremental setup-sample process-ai show-costs show-status clean-db test-matching test-matching-single test-matching-full export-matches test-chatbot test-complete import-full import-sample import-test setup-test start-chatbot-test setup-evaluator setup-evaluator-quick setup-evaluator-custom install-test-deps test test-unit test-api test-integration test-fast test-cov test-ci test-watch
 
 up:
 	cp .env.sample .env || true
@@ -290,3 +290,43 @@ setup-evaluator-custom:
 	@echo "📚 API docs: http://localhost:8000/docs"
 	@echo "🤖 Chatbot API: http://localhost:8000/chatbot/"
 	@echo ""
+
+# ========================================
+# TEST SUITE
+# ========================================
+
+install-test-deps:
+	@echo "📦 Installing test dependencies..."
+	docker compose exec api bash -c "cd /app && pip install pytest pytest-asyncio pytest-cov httpx faker freezegun -q"
+
+test:
+	@echo "🧪 Running all tests..."
+	docker compose exec api bash -c "cd /app && pytest tests -v"
+
+test-unit:
+	@echo "🧪 Running unit tests..."
+	docker compose exec api bash -c "cd /app && pytest tests -v -m unit"
+
+test-api:
+	@echo "🧪 Running API tests..."
+	docker compose exec api bash -c "cd /app && pytest tests -v -m api"
+
+test-integration:
+	@echo "🧪 Running integration tests..."
+	docker compose exec api bash -c "cd /app && pytest tests -v -m integration"
+
+test-fast:
+	@echo "🧪 Running fast tests (excluding slow)..."
+	docker compose exec api bash -c "cd /app && pytest tests -v -m 'not slow'"
+
+test-cov:
+	@echo "🧪 Running tests with coverage..."
+	docker compose exec api bash -c "cd /app && pytest tests -v --cov=app --cov-report=term-missing"
+
+test-ci:
+	@echo "🧪 Running tests for CI..."
+	docker compose exec api bash -c "cd /app && pytest tests -v --cov=app --cov-report=xml --junit-xml=junit.xml"
+
+test-watch:
+	@echo "🧪 Running tests in watch mode..."
+	docker compose exec api bash -c "cd /app && pytest-watch tests"

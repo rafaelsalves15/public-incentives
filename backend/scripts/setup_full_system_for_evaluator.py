@@ -231,26 +231,58 @@ class FullSystemSetup:
     def populate_vector_database(self, incentive_ids: List[str], company_ids: List[str]):
         """Popula base de dados vectorial"""
         logger.info("🧠 Populando base de dados vectorial...")
+        logger.info(f"   Empresas a processar: {len(company_ids)}")
+        logger.info(f"   Incentivos a processar: {len(incentive_ids)}")
+        
+        companies_embeddings_created = 0
+        incentives_embeddings_created = 0
         
         # Gerar embeddings para empresas
         companies = self.db.query(Company).filter(Company.company_id.in_(company_ids)).all()
+        logger.info(f"📊 Gerando embeddings para {len(companies)} empresas...")
+        
         for i, company in enumerate(companies, 1):
             try:
                 success = self.vector_db.add_company_embedding(company)
                 if success:
-                    logger.info(f"✅ Company embedding {i}/{len(companies)}")
+                    companies_embeddings_created += 1
+                    if i % 100 == 0:
+                        logger.info(f"   Progresso empresas: {i}/{len(companies)} embeddings criados")
             except Exception as e:
                 logger.error(f"❌ Erro ao adicionar embedding para empresa {i}: {e}")
+                import traceback
+                logger.error(traceback.format_exc())
+        
+        logger.info(f"✅ Empresas: {companies_embeddings_created}/{len(companies)} embeddings criados")
         
         # Gerar embeddings para incentivos
         incentives = self.db.query(Incentive).filter(Incentive.incentive_id.in_(incentive_ids)).all()
+        logger.info(f"📊 Gerando embeddings para {len(incentives)} incentivos...")
+        
         for i, incentive in enumerate(incentives, 1):
             try:
                 success = self.vector_db.add_incentive_embedding(incentive)
                 if success:
-                    logger.info(f"✅ Incentive embedding {i}/{len(incentives)}")
+                    incentives_embeddings_created += 1
+                    if i % 10 == 0:
+                        logger.info(f"   Progresso incentivos: {i}/{len(incentives)} embeddings criados")
             except Exception as e:
                 logger.error(f"❌ Erro ao adicionar embedding para incentivo {i}: {e}")
+                import traceback
+                logger.error(traceback.format_exc())
+        
+        logger.info(f"✅ Incentivos: {incentives_embeddings_created}/{len(incentives)} embeddings criados")
+        
+        # Verificar quantidade real de embeddings no ChromaDB
+        try:
+            companies_count = self.vector_db.companies_collection.count()
+            incentives_count = self.vector_db.incentives_collection.count()
+            logger.info(f"📊 VERIFICAÇÃO FINAL:")
+            logger.info(f"   Embeddings de empresas no ChromaDB: {companies_count}")
+            logger.info(f"   Embeddings de incentivos no ChromaDB: {incentives_count}")
+            logger.info(f"   Total: {companies_count + incentives_count}")
+        except Exception as e:
+            logger.error(f"❌ Erro ao verificar embeddings no ChromaDB: {e}")
         
         logger.info("✅ Base de dados vectorial populada")
     

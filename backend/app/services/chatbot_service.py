@@ -81,8 +81,8 @@ class QueryRouter:
             "match_query": [
                 r"match", r"correspondência", r"adequada", r"adequado",
                 r"empresa.*incentivo", r"incentivo.*empresa", r"recomenda",
-                r"melhores.*empresas.*incentivo", r"empresas.*para.*incentivo",
-                r"quais.*empresas.*para", r"empresas.*adequadas.*incentivo"
+                r"melhores.*empresas", r"empresas.*para", r"quais.*empresas",
+                r"empresas.*adequadas", r"melhores.*para", r"empresas.*inclui"
             ],
             "analytics_query": [
                 r"quantos", r"total", r"estatística", r"resumo",
