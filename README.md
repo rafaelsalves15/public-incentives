@@ -70,10 +70,17 @@ Para um setup completo do sistema com dados realistas:
 # 1. Configurar API Key
 echo "OPENAI_API_KEY=sk-your-key-here" >> .env
 
-# 2. Setup padrão: 20 incentivos + 1000 empresas (~25-35 min)
+# 2. Adicionar os ficheiros de dados
+# Colocar os ficheiros 'companies.csv' e 'incentives.csv' dentro da pasta /data
+# Estrutura esperada:
+# ├── data/
+# │   ├── companies.csv
+# │   └── incentives.csv
+
+# 3. Setup padrão: 20 incentivos + 1000 empresas (~35-40 min)
 make setup-evaluator
 
-# 3. Acessar interface web
+# 4. Acessar interface web
 # http://localhost:8000/web/
 ```
 
