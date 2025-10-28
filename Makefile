@@ -1,6 +1,10 @@
-.PHONY: up down logs api db test-sample test-sample-incremental setup-sample process-ai show-costs show-status clean-db test-matching test-matching-single test-matching-full export-matches
+.PHONY: up down logs api db test-sample test-sample-incremental setup-sample process-ai show-costs show-status clean-db test-matching test-matching-single test-matching-full export-matches test-chatbot test-complete import-full import-sample import-test setup-test start-chatbot-test setup-evaluator setup-evaluator-quick setup-evaluator-custom install-test-deps test test-unit test-api test-integration test-fast test-cov test-ci test-watch
 
 up:
+	cp .env.sample .env || true
+	docker compose up -d --build
+
+up-with-logs:
 	cp .env.sample .env || true
 	docker compose up -d --build
 	docker compose logs -f api
@@ -118,3 +122,211 @@ export-matches:
 	docker compose cp db:/tmp/matches_export.csv ./data/matches_export_$(shell date +%Y%m%d_%H%M%S).csv
 	@echo "✅ Exportado para data/matches_export_*.csv"
 	@echo ""
+
+# ========================================
+# FASE 3: CHATBOT SYSTEM
+# ========================================
+
+test-chatbot:
+	@echo "🤖 Testando chatbot..."
+	@echo ""
+	docker compose run --rm api python /app/scripts/test_chatbot.py
+	@echo ""
+
+test-complete:
+	@echo "🚀 Teste completo do sistema (API + Chatbot + Interface Web)..."
+	@echo ""
+	@echo "⏳ Aguardando sistema estar pronto..."
+	@sleep 10
+	python test_complete_system.py
+	@echo ""
+	@echo "🌐 Acesse a interface web em: http://localhost:8000/web/"
+	@echo "📚 Documentação da API em: http://localhost:8000/docs"
+	@echo ""
+
+start-chatbot:
+	@echo "🚀 Iniciando sistema completo com chatbot..."
+	@echo ""
+	@make up
+	@echo ""
+	@echo "⏳ Aguardando sistema estar pronto..."
+	@sleep 15
+	@echo ""
+	@echo "✅ Sistema pronto!"
+	@echo "🌐 Interface web: http://localhost:8000/web/"
+	@echo "📚 API docs: http://localhost:8000/docs"
+	@echo "🤖 Chatbot API: http://localhost:8000/chatbot/"
+	@echo ""
+
+generate-matches:
+	@echo "🎯 Gerando matches para o chatbot..."
+	@echo ""
+	@docker compose run --rm api python /app/scripts/generate_matches_for_chatbot.py
+	@echo ""
+
+import-full:
+	@echo "📥 Importando dados dos CSVs completos..."
+	@echo ""
+	@docker compose run --rm api python -c "import sys; sys.path.insert(0, '/app'); from app.services.data_importer import DataImporter; importer = DataImporter(); print('Importando incentives...'); inc = importer.import_incentives('/data/incentives.csv'); print(f'✅ {inc} incentivos'); print('Importando companies...'); comp = importer.import_companies('/data/companies.csv'); print(f'✅ {comp} empresas'); importer.close(); print(f'\n🎉 Total: {inc} incentivos + {comp} empresas')"
+	@echo ""
+
+import-sample:
+	@echo "📥 Importando AMOSTRA: 10 incentivos + 50 empresas..."
+	@echo ""
+	@docker compose run --rm api python /app/scripts/import_sample_data.py 10 50
+	@echo ""
+
+import-test:
+	@echo "📥 Importando AMOSTRA PARA TESTE: 10 incentivos + 1000 empresas..."
+	@echo ""
+	@docker compose run --rm api python /app/scripts/import_sample_data.py 10 1000
+	@echo ""
+
+setup-complete:
+	@echo "🚀 Setup completo do sistema..."
+	@echo ""
+	@$(MAKE) up
+	@sleep 3
+	@echo "📦 Aplicando migrações de BD..."
+	@docker compose run --rm api alembic upgrade head
+	@echo ""
+	@$(MAKE) import-full
+	@$(MAKE) process-ai
+	@$(MAKE) generate-matches
+	@echo ""
+	@echo "✅ SISTEMA COMPLETO PRONTO!"
+	@echo "🌐 Interface web: http://localhost:8000/web/"
+	@echo "📚 API docs: http://localhost:8000/docs"
+	@echo ""
+
+setup-test: 
+	@echo "🚀 Setup completo do sistema de teste..."
+	@echo ""
+	@$(MAKE) up
+	@sleep 3
+	@echo "📦 Aplicando migrações de BD..."
+	@docker compose run --rm api alembic upgrade head
+	@echo ""
+	@$(MAKE) import-test
+	@$(MAKE) process-ai
+	@$(MAKE) generate-matches
+	@echo ""
+	@echo "✅ SISTEMA DE TESTE PRONTO!"
+	@echo "🌐 Interface web: http://localhost:8000/web/"
+	@echo "📚 API docs: http://localhost:8000/docs"
+	@echo ""
+
+start-chatbot-full: setup-complete
+	@echo ""
+	@echo "✅ Sistema completo com matches gerados!"
+	@echo "🌐 Interface web: http://localhost:8000/web/"
+	@echo ""
+
+start-chatbot-test: setup-test
+	@echo ""
+	@echo "✅ Sistema de teste pronto (10 incentiv os + 1000 empresas)!"
+	@echo "🌐 Interface web: http://localhost:8000/web/"
+	@echo ""
+
+# ========================================
+# SETUP PARA AVALIADOR
+# Sistema completo com inferência de dados por AI
+# ========================================
+
+setup-evaluator:
+	@echo "🚀 Setup completo do sistema para avaliador..."
+	@echo ""
+	@echo "📊 Configuração padrão: 20 incentivos + 1000 empresas"
+	@echo "   (Para customizar: make setup-evaluator-custom NUM_INC=<n> NUM_COMP=<n>)"
+	@echo ""
+	@$(MAKE) up
+	@sleep 3
+	@echo "📦 Aplicando migrações de BD..."
+	@docker compose run --rm api alembic upgrade head
+	@echo ""
+	@echo "🤖 Executando setup completo com inferência de dados por AI..."
+	@docker compose run --rm api python /app/scripts/setup_full_system_for_evaluator.py 20 1000
+	@echo ""
+	@echo "✅ SISTEMA COMPLETO PRONTO PARA AVALIADOR!"
+	@echo "🌐 Interface web: http://localhost:8000/web/"
+	@echo "📚 API docs: http://localhost:8000/docs"
+	@echo "🤖 Chatbot API: http://localhost:8000/chatbot/"
+	@echo ""
+
+setup-evaluator-quick:
+	@echo "🚀 Setup RÁPIDO do sistema para avaliador..."
+	@echo ""
+	@echo "📊 Configuração: 10 incentivos + 100 empresas"
+	@echo ""
+	@$(MAKE) up
+	@sleep 3
+	@echo "📦 Aplicando migrações de BD..."
+	@docker compose run --rm api alembic upgrade head
+	@echo ""
+	@echo "🤖 Executando setup rápido com inferência de dados por AI..."
+	@docker compose run --rm api python /app/scripts/setup_full_system_for_evaluator.py 10 100
+	@echo ""
+	@echo "✅ SISTEMA PRONTO PARA AVALIADOR!"
+	@echo "🌐 Interface web: http://localhost:8000/web/"
+	@echo "📚 API docs: http://localhost:8000/docs"
+	@echo "🤖 Chatbot API: http://localhost:8000/chatbot/"
+	@echo ""
+
+setup-evaluator-custom:
+	@echo "🚀 Setup customizado do sistema para avaliador..."
+	@echo ""
+	@echo "📊 Configuração: $(NUM_INC) incentivos + $(NUM_COMP) empresas"
+	@echo ""
+	@$(MAKE) up
+	@sleep 3
+	@echo "📦 Aplicando migrações de BD..."
+	@docker compose run --rm api alembic upgrade head
+	@echo ""
+	@echo "🤖 Executando setup customizado com inferência de dados por AI..."
+	@docker compose run --rm api python /app/scripts/setup_full_system_for_evaluator.py $(NUM_INC) $(NUM_COMP)
+	@echo ""
+	@echo "✅ SISTEMA PRONTO PARA AVALIADOR!"
+	@echo "🌐 Interface web: http://localhost:8000/web/"
+	@echo "📚 API docs: http://localhost:8000/docs"
+	@echo "🤖 Chatbot API: http://localhost:8000/chatbot/"
+	@echo ""
+
+# ========================================
+# TEST SUITE
+# ========================================
+
+install-test-deps:
+	@echo "📦 Installing test dependencies..."
+	docker compose exec api bash -c "cd /app && pip install pytest pytest-asyncio pytest-cov httpx faker freezegun -q"
+
+test:
+	@echo "🧪 Running all tests..."
+	docker compose exec api bash -c "cd /app && pytest tests -v"
+
+test-unit:
+	@echo "🧪 Running unit tests..."
+	docker compose exec api bash -c "cd /app && pytest tests -v -m unit"
+
+test-api:
+	@echo "🧪 Running API tests..."
+	docker compose exec api bash -c "cd /app && pytest tests -v -m api"
+
+test-integration:
+	@echo "🧪 Running integration tests..."
+	docker compose exec api bash -c "cd /app && pytest tests -v -m integration"
+
+test-fast:
+	@echo "🧪 Running fast tests (excluding slow)..."
+	docker compose exec api bash -c "cd /app && pytest tests -v -m 'not slow'"
+
+test-cov:
+	@echo "🧪 Running tests with coverage..."
+	docker compose exec api bash -c "cd /app && pytest tests -v --cov=app --cov-report=term-missing"
+
+test-ci:
+	@echo "🧪 Running tests for CI..."
+	docker compose exec api bash -c "cd /app && pytest tests -v --cov=app --cov-report=xml --junit-xml=junit.xml"
+
+test-watch:
+	@echo "🧪 Running tests in watch mode..."
+	docker compose exec api bash -c "cd /app && pytest-watch tests"

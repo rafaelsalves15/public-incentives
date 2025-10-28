@@ -1,3 +1,27 @@
+# Vector DB / embeddings (Chroma)
+backend/chroma_db/
+**/chroma.sqlite3
+**/*.bin
+**/*.pickle
+
+# Dados gerados pela app (ficam fora do Git)
+backend/data/*
+!backend/data/.gitkeep
+
+# Python tooling extra
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Docker / Compose
+docker-compose.override.yml
+
+# Editor temporários extra
+*.orig
+
+
 # Python
 __pycache__/
 *.pyc

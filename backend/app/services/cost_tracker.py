@@ -31,6 +31,10 @@ class CostTracker:
         "gpt-4o": {
             "input": 2.50,    # $2.50 / 1M tokens
             "output": 10.00   # $10.00 / 1M tokens
+        },
+        "text-embedding-3-small": {
+            "input": 0.02,    # $0.02 / 1M tokens
+            "output": 0.0     # Embeddings não têm output tokens
         }
     }
     
@@ -140,6 +144,39 @@ class CostTracker:
             "success": success
         }
     
+    def track_cost(
+        self,
+        operation_type: str,
+        model_name: str,
+        input_tokens: int,
+        output_tokens: int,
+        total_tokens: int,
+        input_cost: float,
+        output_cost: float,
+        total_cost: float,
+        cache_hit: bool = False,
+        success: bool = True,
+        error_message: Optional[str] = None,
+        incentive_id: Optional[str] = None
+    ) -> None:
+        """
+        Alias para track_api_call para compatibilidade.
+        """
+        usage_data = {
+            'prompt_tokens': input_tokens,
+            'completion_tokens': output_tokens,
+            'total_tokens': total_tokens
+        }
+        self.track_api_call(
+            operation_type=operation_type,
+            model_name=model_name,
+            usage_data=usage_data,
+            incentive_id=incentive_id,
+            cache_hit=cache_hit,
+            success=success,
+            error_message=error_message
+        )
+    
     def get_session_stats(self) -> Dict[str, Any]:
         """
         Retorna estatísticas da sessão atual (em memória).
@@ -244,7 +281,10 @@ class CostTracker:
         operation_label = {
             "ai_description": "AI Description ",
             "extract_dates": "Extract Dates  ",
-            "extract_budget": "Extract Budget "
+            "extract_budget": "Extract Budget ",
+            "generate_incentive_embedding": "Incentive Embed ",
+            "generate_company_embedding": "Company Embed  ",
+            "batch_company_match": "Batch Match   "
         }.get(operation_type, operation_type)
         
         print(f"  {icon} {operation_label}: {cost_str:12} ({status})")

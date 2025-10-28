@@ -134,6 +134,7 @@ INSTRUÇÕES:
 - OBRIGATÓRIO: INFERE códigos CAE específicos baseados nos setores elegíveis
 - Exemplos: "Educação" → ["85520", "85530"], "Tecnologia" → ["62010", "62020"], "Construção" → ["41200", "41100"]
 - Se não conseguir inferir códigos específicos, usa códigos relacionados ao setor
+- OBRIGATÓRIO: INFERE tamanhos de empresa compatíveis (ex: ["small", "medium", "large"])
 - Responde APENAS com o JSON, sem texto adicional
 
 JSON:
@@ -846,6 +847,99 @@ Usa linguagem clara e adequada para negócios.
             logger.error(f"Error generating summary for incentive {incentive.incentive_id}: {e}")
             return f"Resumo não disponível para {incentive.title}"
     
+    def infer_company_data(self, company: Company) -> Dict[str, Any]:
+        """
+        Infere dados da empresa usando LLM:
+        - CAE codes (múltiplos códigos relevantes)
+        - Região (NUTS II de Portugal)
+        - Tamanho da empresa (micro/small/medium/large)
+        
+        Args:
+            company: Empresa com dados básicos (nome, CAE label, descrição)
+            
+        Returns:
+            Dict com cae_codes, region, size
+        """
+        # Cache key baseado no nome da empresa
+        cache_key = f"company_inference_{company.company_name}"
+        
+        if cache_key in self._prompt_cache:
+            self._cache_hits += 1
+            logger.info(f"🔍 Cache HIT for '{company.company_name}' (cache size: {len(self._prompt_cache)})")
+            return self._prompt_cache[cache_key]
+        
+        self._cache_misses += 1
+        logger.info(f"🔍 Cache MISS for '{company.company_name}' - calling OpenAI API (hits: {self._cache_hits}, misses: {self._cache_misses})")
+        
+        prompt = f"""
+Analisa esta empresa portuguesa e retorna APENAS um JSON válido:
+
+EMPRESA:
+- Nome: {company.company_name}
+- CAE Label: {company.cae_primary_label or 'N/A'}
+- Descrição: {company.trade_description_native or 'N/A'}
+- Website: {company.website or 'N/A'}
+
+RETORNA APENAS ESTE JSON (sem texto adicional):
+{{
+    "cae_codes": ["62010", "62020"],
+    "region": "Norte",
+    "size": "small"
+}}
+
+REGRAS:
+- cae_codes: Lista de códigos CAE relevantes (máximo 5)
+- region: Norte, Centro, Lisboa, Alentejo, Algarve, Açores, Madeira, ou "N/A"
+- size: micro, small, medium, large, ou "N/A"
+- SEM texto explicativo, SEM markdown, APENAS JSON
+"""
+        
+        try:
+            response = self.client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.2,
+                max_tokens=300
+            )
+            
+            content = response.choices[0].message.content.strip()
+            
+            # Parse JSON response
+            try:
+                result = json.loads(content)
+                
+                # Validar estrutura
+                if not isinstance(result, dict):
+                    raise ValueError("Response is not a dict")
+                
+                # Garantir campos obrigatórios
+                result.setdefault('cae_codes', [])
+                result.setdefault('region', 'N/A')
+                result.setdefault('size', 'N/A')
+                
+                # Validar tipos
+                if not isinstance(result['cae_codes'], list):
+                    result['cae_codes'] = []
+                if not isinstance(result['region'], str):
+                    result['region'] = 'N/A'
+                if not isinstance(result['size'], str):
+                    result['size'] = 'N/A'
+                
+                # Cache do resultado
+                self._prompt_cache[cache_key] = result
+                logger.info(f"✅ Cached result for '{company.company_name}' (cache size: {len(self._prompt_cache)})")
+                
+                return result
+                
+            except json.JSONDecodeError as e:
+                logger.error(f"JSON decode error for company {company.company_name}: {e}")
+                logger.error(f"Raw response: {content}")
+                return {"cae_codes": [], "region": "N/A", "size": "N/A"}
+            
+        except Exception as e:
+            logger.error(f"Error inferring data for company {company.company_name}: {e}")
+            return {"cae_codes": [], "region": "N/A", "size": "N/A"}
+
     def extract_structured_data(self, incentive: Incentive, raw_csv_data: Dict = None) -> Dict[str, Any]:
         """
         Legacy method - kept for backwards compatibility.
@@ -966,3 +1060,91 @@ Usa linguagem clara e adequada para negócios.
             "duration_seconds": duration,
             "cost_stats": self.cost_tracker.get_session_stats()
         }
+    
+    async def generate_text_response(self, prompt: str, max_tokens: int = 500) -> str:
+        """
+        Gera resposta de texto usando LLM para chatbot
+        
+        Args:
+            prompt: Prompt para o LLM
+            max_tokens: Número máximo de tokens na resposta
+            
+        Returns:
+            Resposta gerada pelo LLM
+        """
+        try:
+            # Verificar cache primeiro
+            prompt_hash = hashlib.md5(prompt.encode()).hexdigest()
+            if prompt_hash in self._prompt_cache:
+                self._cache_hits += 1
+                logger.info(f"Cache HIT for text response (hash: {prompt_hash[:8]}...)")
+                return self._prompt_cache[prompt_hash]
+            
+            self._cache_misses += 1
+            logger.info(f"Cache MISS for text response (hash: {prompt_hash[:8]}...)")
+            
+            # Chamar API OpenAI
+            response = self.client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": "Você é um assistente especializado em incentivos públicos portugueses. Responda de forma útil, amigável e precisa."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=max_tokens,
+                temperature=0.7
+            )
+            
+            # Extrair resposta
+            response_text = response.choices[0].message.content.strip()
+            
+            # Guardar no cache
+            self._prompt_cache[prompt_hash] = response_text
+            
+            # Tracking de custos
+            input_tokens = response.usage.prompt_tokens
+            output_tokens = response.usage.completion_tokens
+            total_tokens = response.usage.total_tokens
+            
+            # Calcular custos (gpt-4o-mini: $0.15/1M input, $0.60/1M output)
+            input_cost = (input_tokens / 1_000_000) * 0.15
+            output_cost = (output_tokens / 1_000_000) * 0.60
+            total_cost = input_cost + output_cost
+            
+            # Guardar tracking se cost_tracker tem o método
+            if hasattr(self.cost_tracker, 'track_cost'):
+                self.cost_tracker.track_cost(
+                    operation_type="text_response",
+                    model_name="gpt-4o-mini",
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    total_tokens=total_tokens,
+                    input_cost=input_cost,
+                    output_cost=output_cost,
+                    total_cost=total_cost,
+                    cache_hit=False,
+                    success=True
+                )
+            
+            logger.info(f"Generated text response: {total_tokens} tokens, ${total_cost:.6f}")
+            return response_text
+            
+        except Exception as e:
+            logger.error(f"Error generating text response: {e}")
+            
+            # Tracking de erro se cost_tracker tem o método
+            if hasattr(self.cost_tracker, 'track_cost'):
+                self.cost_tracker.track_cost(
+                    operation_type="text_response",
+                    model_name="gpt-4o-mini",
+                    input_tokens=0,
+                    output_tokens=0,
+                    total_tokens=0,
+                    input_cost=0,
+                    output_cost=0,
+                    total_cost=0,
+                    cache_hit=False,
+                    success=False,
+                    error_message=str(e)
+                )
+            
+            return "Desculpe, não consegui gerar uma resposta. Pode reformular a pergunta?"

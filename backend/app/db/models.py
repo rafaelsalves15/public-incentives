@@ -50,8 +50,8 @@ class IncentiveMetadata(Base):
     ai_processing_error = Column(Text)  # Mensagem de erro se falhar
     
     # Timestamps
-    created_at = Column(DateTime, server_default="CURRENT_TIMESTAMP")
-    updated_at = Column(DateTime, server_default="CURRENT_TIMESTAMP", onupdate=func.now())
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
     
     # Relationship com incentive (1:1)
     incentive = relationship("Incentive", back_populates="incentive_metadata")
@@ -85,8 +85,8 @@ class Company(Base):
     
     # Metadata
     is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, server_default="CURRENT_TIMESTAMP")
-    updated_at = Column(DateTime, server_default="CURRENT_TIMESTAMP", onupdate=func.now())
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
 
 # STUB para Fase 2 - apenas para evitar erros de importação
@@ -111,7 +111,11 @@ class IncentiveCompanyMatch(Base):
     ranking_position = Column(Integer)  # 1, 2, 3, 4, 5
     
     # Metadata
-    created_at = Column(DateTime, server_default="CURRENT_TIMESTAMP")
+    created_at = Column(DateTime, server_default=func.now())
+    
+    # Relationships
+    incentive = relationship("Incentive", foreign_keys=[incentive_id])
+    company = relationship("Company", foreign_keys=[company_id])
 
 
 class AICostTracking(Base):
@@ -146,7 +150,7 @@ class AICostTracking(Base):
     error_message = Column(Text)  # Mensagem de erro (se aplicável)
     
     # Timestamp
-    created_at = Column(DateTime, server_default="CURRENT_TIMESTAMP")
+    created_at = Column(DateTime, server_default=func.now())
     
     # Relationship
     incentive = relationship("Incentive", foreign_keys=[incentive_id])

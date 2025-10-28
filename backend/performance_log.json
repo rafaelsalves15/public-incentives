@@ -1,0 +1,126 @@
+{
+  "entries": [
+    {
+      "timestamp": 1761505677.6931329,
+      "results": {
+        "embedding_optimization": {},
+        "vector_db_optimization": {},
+        "threshold_optimization": {},
+        "cost_analysis": {},
+        "total_time": 0,
+        "success": false,
+        "error": "name 'hashlib' is not defined"
+      },
+      "metrics": {
+        "total_requests": 0,
+        "cache_hits": 0,
+        "cache_misses": 0,
+        "total_cost_usd": 0.0,
+        "avg_response_time": 0.0,
+        "optimization_applied": []
+      }
+    },
+    {
+      "timestamp": 1761505697.918233,
+      "results": {
+        "embedding_optimization": {
+          "companies_processed": 20,
+          "incentives_processed": 5,
+          "cache_hits": 0,
+          "new_embeddings": 25,
+          "cost_saved": 0.0005
+        },
+        "vector_db_optimization": {
+          "embeddings_added": 25,
+          "duplicates_removed": 0,
+          "index_optimized": true
+        },
+        "threshold_optimization": {
+          "vector_search_k": 30
+        },
+        "cost_analysis": {
+          "current_costs": {
+            "embedding_cost_usd": 0.0005,
+            "llm_cost_usd": 0.01,
+            "total_cost_usd": 0.0105,
+            "cache_hit_rate": 50.0
+          },
+          "optimization_potential": {
+            "llm_cost_reduction_usd": 0.006999999999999999,
+            "embedding_cost_reduction_usd": 0.00025,
+            "total_savings_usd": 0.0072499999999999995,
+            "total_optimized_cost_usd": 0.0032500000000000003
+          },
+          "recommendations": [
+            "Melhorar cache de embeddings para reduzir custos",
+            "Focar na otimiza\u00e7\u00e3o de custos LLM",
+            "Usar sistema h\u00edbrido para reduzir custos LLM em ~70%",
+            "Implementar cache persistente para embeddings",
+            "Monitorar performance regularmente"
+          ]
+        },
+        "total_time": 10.682178258895874,
+        "success": true
+      },
+      "metrics": {
+        "total_requests": 0,
+        "cache_hits": 0,
+        "cache_misses": 0,
+        "total_cost_usd": 0.0,
+        "avg_response_time": 0.0,
+        "optimization_applied": []
+      }
+    },
+    {
+      "timestamp": 1761506445.3569784,
+      "results": {
+        "embedding_optimization": {
+          "companies_processed": 20,
+          "incentives_processed": 5,
+          "cache_hits": 25,
+          "new_embeddings": 0,
+          "cost_saved": 0.0
+        },
+        "vector_db_optimization": {
+          "embeddings_added": 25,
+          "duplicates_removed": 0,
+          "index_optimized": true
+        },
+        "threshold_optimization": {
+          "semantic_threshold": 0.35,
+          "vector_search_k": 30
+        },
+        "cost_analysis": {
+          "current_costs": {
+            "embedding_cost_usd": 0.0,
+            "llm_cost_usd": 0.01,
+            "total_cost_usd": 0.01,
+            "cache_hit_rate": 100.0
+          },
+          "optimization_potential": {
+            "llm_cost_reduction_usd": 0.006999999999999999,
+            "embedding_cost_reduction_usd": 0.0,
+            "total_savings_usd": 0.006999999999999999,
+            "total_optimized_cost_usd": 0.0030000000000000005
+          },
+          "recommendations": [
+            "Focar na otimiza\u00e7\u00e3o de custos LLM",
+            "Usar sistema h\u00edbrido para reduzir custos LLM em ~70%",
+            "Implementar cache persistente para embeddings",
+            "Monitorar performance regularmente"
+          ]
+        },
+        "total_time": 0.5006940364837646,
+        "success": true
+      },
+      "metrics": {
+        "total_requests": 0,
+        "cache_hits": 0,
+        "cache_misses": 0,
+        "total_cost_usd": 0.0,
+        "avg_response_time": 0.0,
+        "optimization_applied": []
+      }
+    }
+  ]
+}
