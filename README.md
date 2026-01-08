@@ -8,6 +8,7 @@
 
 > **Sistema inteligente de matching entre incentivos públicos portugueses e empresas**, usando IA híbrida (determinística + LLM) para processar, estruturar e recomendar os incentivos mais adequados para cada empresa.
 
+![Chatbot](publicincentives.jpg)
 ---
 
 ## 📋 Índice
